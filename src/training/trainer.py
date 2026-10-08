@@ -112,7 +112,9 @@ class Trainer:
         """Resume from last.pt if present (Colab session recovery)."""
         if not self.last_ckpt.exists():
             return
-        state = torch.load(self.last_ckpt, map_location=self.device)
+        # weights_only=False: these are our own checkpoints and include numpy/torch
+        # RNG state objects for resumability (PyTorch 2.6+ default is True).
+        state = torch.load(self.last_ckpt, map_location=self.device, weights_only=False)
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
         if self.scheduler and state.get("scheduler"):
@@ -215,6 +217,6 @@ class Trainer:
 
     def load_best(self) -> None:
         if self.best_ckpt.exists():
-            state = torch.load(self.best_ckpt, map_location=self.device)
+            state = torch.load(self.best_ckpt, map_location=self.device, weights_only=False)
             self.model.load_state_dict(state["model"])
             logger.info("Loaded best checkpoint (epoch %d).", state["epoch"])
