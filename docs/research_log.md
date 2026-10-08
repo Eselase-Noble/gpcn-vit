@@ -21,14 +21,23 @@ loud warning; for the real 82-patient BreakHis the single split is non-degenerat
 but per §8 patient-level cross-validation is the preferred evaluation and should
 be added before baseline comparisons.
 
-### Milestone-1 exit questions — answered once run on real data
-Run `python scripts/run_milestone1.py --data-root <BreakHis> --magnification 40X`.
-(Counts below are populated from `results/metrics/eda_summary.json`.)
-1. patients — N/A (pending real data)
-2. images — N/A
-3. benign/malignant — N/A
-4. images per magnification — N/A
-5. images per patient — N/A
-6. slides per patient — N/A (expect 1)
-7. class balance — N/A
-8. splits patient-disjoint — verified by code (raises on violation)
+### Milestone-1 exit questions — ANSWERED on real BreakHis 40X (seed 42)
+Run in Colab; env: python 3.13, torch 2.11.0+cpu, commit 43512be.
+1. patients — **81** (at 40X; full dataset is 82 — one malignant patient has no
+   40X image. Confirmed NOT a collision: slides_per_patient max = 1.)
+2. images — **1,995** (matches official BreakHis 40X exactly)
+3. benign/malignant — **625 / 1,370** (matches official 40X exactly)
+4. images per magnification — 40X: 1,995
+5. images per patient — min 1, max 64, mean 24.6, median 23
+6. slides per patient — **1** (confirms clean patient IDs)
+7. class balance — **imbalanced**, 68.7% malignant; patients 57 malignant / 24 benign
+8. splits patient-disjoint — **verified** (train 57 / val 13 / test 11 patients)
+
+### Decisions arising from real data
+- **Imbalance (2.2:1):** results tables must lead with PR-AUC, balanced accuracy,
+  sensitivity, specificity — not raw accuracy. (Baseline "always malignant" = 68.7% acc.)
+- **Small test fold (11 patients):** single-split estimates are high-variance.
+  RECOMMEND adopting patient-level stratified k-fold CV (§8) before Baseline 0.
+- **Singleton bags:** min 1 image/patient → degenerate graphs for later bag/graph
+  rungs; needs a documented bag-size policy when we reach Baseline 1+.
+- Milestone 1 COMPLETE. Next rung (pending CV decision): Baseline 0 — patch ViT.
