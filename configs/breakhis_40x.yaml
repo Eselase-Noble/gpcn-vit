@@ -1,0 +1,26 @@
+# BreakHis 40X — first controlled experiment configuration (Milestone 1 scope).
+# NOTE: BreakHis is NOT a WSI dataset. It is a controlled histopathology-image
+# benchmark used to test the fundamental relational hypothesis (see README §scope).
+
+dataset:
+  name: breakhis
+  magnification: 40X          # one of: 40X, 100X, 200X, 400X, all
+  # data_root is resolved from GPCN_DATA_ROOT or <repo>/data if left null.
+  data_root: null
+
+split:
+  strategy: patient_level     # the ONLY allowed strategy — never split by image
+  ratios: [0.70, 0.15, 0.15]  # train / val / test (by patient)
+  seed: 42
+
+reproducibility:
+  seed: 42
+  deterministic: false        # best-effort; may cost GPU performance (§17)
+
+# Placeholders for later milestones — unused in Milestone 1.
+model:
+  name: null                  # e.g. patch_vit, mean_pool, spatial_gnn, gpcn
+training:
+  epochs: null
+graph:
+  type: null

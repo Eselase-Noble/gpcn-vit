@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpcn-research"
+version = "0.0.1"
+description = "GPCN-ViT: reproducible computational-pathology research framework (Milestone 1: BreakHis pipeline)."
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+# Run pytest from the repo root; this makes `import src.*` resolve.
+testpaths = ["tests"]
+addopts = "-ra -q"
+pythonpath = ["."]

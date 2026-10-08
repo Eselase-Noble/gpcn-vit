@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Data & heavy artifacts (keep the directory structure via .gitkeep, not contents)
+data/raw/*
+data/processed/*
+data/metadata/*.csv
+data/splits/*.json
+results/checkpoints/*
+results/embeddings/*
+results/logs/*
+results/figures/*
+results/metrics/*.json
+!**/.gitkeep
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

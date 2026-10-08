@@ -1,0 +1,23 @@
+# Conda environment for local development. On Colab, use pip (torch is preinstalled).
+name: gpcn
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - pyyaml
+  - pytest
+  - pip
+  - pip:
+      # Milestone 1 needs nothing beyond the above. Add DL stack per milestone:
+      # - torch
+      # - torchvision
+      # - timm
+      # - scikit-learn
+      # - matplotlib
+      # - seaborn
+      # - tqdm
+      # - tensorboard
+      # - torch-geometric
+      # - networkx

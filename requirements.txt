@@ -1,0 +1,18 @@
+# --- Milestone 1 (metadata ingestion, EDA, patient-level splits) ---
+numpy
+pandas
+pyyaml
+pytest
+
+# --- Later milestones (baselines, embeddings, graphs, GPCN) ---
+# Uncomment / install as each milestone begins. Pinned loosely for Colab.
+# torch
+# torchvision
+# timm                 # ViT backbones (Baseline 0 onward)
+# scikit-learn         # metrics, stratification helpers
+# matplotlib
+# seaborn
+# tqdm
+# tensorboard
+# torch-geometric      # GNN baselines (Baseline 3+) and GPCN
+# networkx             # graph construction / analysis
