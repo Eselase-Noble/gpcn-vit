@@ -81,6 +81,7 @@ class Trainer:
         self.start_epoch = 0
         self.best_monitor = -np.inf
         self.history: List[Dict] = []
+        self._fingerprint: Optional[Dict] = None  # set in fit()
 
     # ---- checkpointing ----------------------------------------------------
 
@@ -102,6 +103,7 @@ class Trainer:
             "torch_rng": torch.get_rng_state(),
             "numpy_rng": np.random.get_state(),
             "cfg": self.cfg.__dict__,
+            "fingerprint": self._fingerprint,
         }
         torch.save(state, self.last_ckpt)
         if is_best:
@@ -109,20 +111,34 @@ class Trainer:
         (self.ckpt_dir / "history.json").write_text(json.dumps(self.history, indent=2))
 
     def maybe_resume(self) -> None:
-        """Resume from last.pt if present (Colab session recovery)."""
+        """Resume from last.pt if present AND it matches this run (Colab recovery).
+
+        A fingerprint (train size + epochs) guards against resuming a checkpoint
+        from a different run that happens to share the directory (e.g. a smoke
+        run vs a full run) — on mismatch we start fresh instead of corrupting state.
+        """
         if not self.last_ckpt.exists():
             return
         # weights_only=False: these are our own checkpoints and include numpy/torch
         # RNG state objects for resumability (PyTorch 2.6+ default is True).
         state = torch.load(self.last_ckpt, map_location=self.device, weights_only=False)
+
+        fp = state.get("fingerprint")
+        if fp is not None and self._fingerprint is not None and fp != self._fingerprint:
+            logger.warning(
+                "Checkpoint fingerprint %s != current run %s — ignoring stale "
+                "checkpoint and starting fresh.", fp, self._fingerprint)
+            return
+
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
         if self.scheduler and state.get("scheduler"):
             self.scheduler.load_state_dict(state["scheduler"])
         self.best_monitor = state.get("best_monitor", -np.inf)
         self.start_epoch = state["epoch"] + 1
+        # RNG state must be a CPU ByteTensor; map_location may have moved it to GPU.
         if state.get("torch_rng") is not None:
-            torch.set_rng_state(state["torch_rng"])
+            torch.set_rng_state(state["torch_rng"].cpu().to(torch.uint8))
         if state.get("numpy_rng") is not None:
             np.random.set_state(state["numpy_rng"])
         hist = self.ckpt_dir / "history.json"
@@ -186,6 +202,10 @@ class Trainer:
         return m
 
     def fit(self, train_loader: DataLoader, val_loader: DataLoader) -> Dict:
+        self._fingerprint = {
+            "n_train": len(train_loader.dataset),
+            "epochs": self.cfg.epochs,
+        }
         self.maybe_resume()
         for epoch in range(self.start_epoch, self.cfg.epochs):
             t0 = time.time()

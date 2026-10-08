@@ -164,8 +164,10 @@ def main() -> int:
         log.warning("SMOKE MODE: %d patients, %d images, epochs=1 (plumbing test only)",
                     df["patient_id"].nunique(), len(df))
 
-    run_root = ensure_dir(get_results_root() / "baseline0" /
-                          (f"{mag}_cv" if args.cv else f"{mag}_single"))
+    tag = f"{mag}_cv" if args.cv else f"{mag}_single"
+    if args.smoke:
+        tag += "_smoke"  # keep throwaway smoke artifacts out of real run dirs
+    run_root = ensure_dir(get_results_root() / "baseline0" / tag)
     (run_root / "run_config.json").write_text(json.dumps(
         {"config": cfg, "env": env, "cv": args.cv, "smoke": args.smoke}, indent=2, default=str))
 
