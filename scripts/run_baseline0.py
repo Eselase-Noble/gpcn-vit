@@ -154,9 +154,15 @@ def main() -> int:
     train_cfg.setdefault("learning_rate", 3e-5)
 
     if args.smoke:
-        df = df.groupby("label_binary", group_keys=False).apply(lambda g: g.head(40))
+        # Subsample PATIENTS (not images) so the patient split stays non-degenerate,
+        # then cap images per patient for speed. Numbers here are meaningless.
+        uniq = df.drop_duplicates("patient_id")[["patient_id", "label_binary"]]
+        keep = uniq.groupby("label_binary", group_keys=False).head(8)["patient_id"]
+        df = df[df["patient_id"].isin(keep)]
+        df = df.groupby("patient_id", group_keys=False).head(6).reset_index(drop=True)
         train_cfg["epochs"] = 1
-        log.warning("SMOKE MODE: subset=%d images, epochs=1 (plumbing test only)", len(df))
+        log.warning("SMOKE MODE: %d patients, %d images, epochs=1 (plumbing test only)",
+                    df["patient_id"].nunique(), len(df))
 
     run_root = ensure_dir(get_results_root() / "baseline0" /
                           (f"{mag}_cv" if args.cv else f"{mag}_single"))

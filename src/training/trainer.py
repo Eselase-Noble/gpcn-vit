@@ -160,6 +160,8 @@ class Trainer:
             p = torch.softmax(self.model(x), dim=1)[:, 1]  # P(malignant)
             probs.append(p.cpu().numpy())
             indices.append(batch["index"].numpy())
+        if not probs:  # empty loader (e.g. a degenerate fold) — return empty frame
+            return pd.DataFrame(columns=["filename", "patient_id", "label_binary", "prob"])
         probs = np.concatenate(probs)
         indices = np.concatenate(indices)
         meta = ds.df.iloc[indices]
@@ -172,6 +174,8 @@ class Trainer:
 
     def _val_monitor(self, val_loader: DataLoader) -> Dict:
         preds = self.predict_df(val_loader)
+        if len(preds) == 0:  # no validation data (degenerate fold) — monitor undefined
+            return {self.cfg.monitor: float("nan")}
         if self.cfg.monitor_level == "patient":
             agg = aggregate_to_patient(preds)
             m = compute_metrics(agg["label_binary"].to_numpy(), agg["prob"].to_numpy())
