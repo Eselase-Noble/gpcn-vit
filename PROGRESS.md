@@ -5,8 +5,8 @@
 > `docs/experiment_protocol.md`. The running history lives in `docs/research_log.md`.
 
 **Last updated:** 2026-10-08
-**Current milestone:** Milestone 2 — evaluation module — COMPLETE ✅ (27 tests passing)
-**Next action:** Baseline 0 — independent patch ViT classifier (runs in Colab GPU)
+**Current milestone:** Baseline 0 — patch ViT. Logic layer DONE ✅ (local tests); torch training stack NEXT (Colab).
+**Next action:** build ViT model + image dataset + trainer (resumable) + runner → smoke-test in Colab
 
 **Eval protocol DECIDED (2026-10-08):** prototype/debug on the single 57/13/11 split; report final
 results under **patient-level stratified 5-fold CV** (mean ± std). Applies to every model on the ladder.
