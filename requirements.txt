@@ -5,11 +5,14 @@ pyyaml
 pytest
 scikit-learn           # metrics (ROC/PR-AUC), stratified k-fold CV
 
-# --- Later milestones (baselines, embeddings, graphs, GPCN) ---
-# Uncomment / install as each milestone begins. Pinned loosely for Colab.
-# torch
-# torchvision
-# timm                 # ViT backbones (Baseline 0 onward)
+# --- Baseline 0 (patch ViT; GPU — preinstalled on Colab) ---
+torch
+torchvision
+timm                   # ViT backbones (vit_small_patch16_224)
+pillow                 # image loading
+
+# --- Later milestones (graphs, GPCN) ---
+# Uncomment as each milestone begins.
 # matplotlib
 # seaborn
 # tqdm

@@ -10,17 +10,32 @@ dataset:
 
 split:
   strategy: patient_level     # the ONLY allowed strategy — never split by image
-  ratios: [0.70, 0.15, 0.15]  # train / val / test (by patient)
+  ratios: [0.70, 0.15, 0.15]  # train / val / test (by patient) for prototype split
+  n_splits: 5                 # folds for --cv (reported results)
   seed: 42
 
 reproducibility:
   seed: 42
   deterministic: false        # best-effort; may cost GPU performance (§17)
 
-# Placeholders for later milestones — unused in Milestone 1.
+# --- Baseline 0: independent patch ViT classifier (docs/baseline0_spec.md) ---
+# FIXED backbone for the whole ladder so comparisons isolate relational reasoning.
 model:
-  name: null                  # e.g. patch_vit, mean_pool, spatial_gnn, gpcn
+  name: patch_vit
+  backbone: vit_small_patch16_224   # ImageNet pretrained, fine-tuned
+  num_classes: 2
+  pretrained: true
+  freeze_backbone: false            # fine-tune (do not freeze) for primary experiment
+
 training:
-  epochs: null
+  epochs: 15
+  batch_size: 32
+  learning_rate: 0.00003            # 3e-5, AdamW
+  weight_decay: 0.0001
+  monitor: roc_auc                  # val metric for best-epoch selection
+  monitor_level: patient            # patient-level is the primary unit
+  threshold_objective: balanced_accuracy  # threshold chosen on VAL only
+  # Imbalance handled via fold-local class-weighted loss (no oversampling).
+
 graph:
-  type: null
+  type: null                  # unused until Baseline 3+

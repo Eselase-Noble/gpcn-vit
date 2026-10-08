@@ -1,5 +1,22 @@
 # Research Log
 
+## 2026-10-08 — Baseline 0: patch ViT training stack (code complete)
+
+Spec locked in `docs/baseline0_spec.md` (fixed ViT-S/16 backbone across ladder,
+patient-level primary eval, fold-local weighted loss, val-only thresholding).
+- `src/models/baselines/patch_vit.py`: timm vit_small_patch16_224 wrapper
+  (forward/embed/transforms/param-counts).
+- `src/datasets/image_dataset.py`: metadata-slice image Dataset (leakage-safe).
+- `src/training/trainer.py`: resumable fine-tuning (checkpoint+RNG restore,
+  per-epoch metrics JSON, best-by-val-monitor); §13 Colab recovery.
+- `src/embeddings/extractor.py`: resumable ViT embedding cache for later graph rungs.
+- `scripts/run_baseline0.py`: config-driven; --smoke / single split / --cv.
+- configs/breakhis_40x.yaml extended with model+training sections.
+- Verified locally: all modules compile (py_compile), config parses, 35 tests pass.
+  Torch/timm not installable locally (py3.14/CPU) → full run happens in Colab.
+- AWAITING: Colab run (smoke → single split → 5-fold CV). Results table stays N/A
+  until real numbers return.
+
 ## 2026-10-08 — Milestone 2: evaluation module
 
 - `src/evaluation/metrics.py`: `compute_metrics` (ROC-AUC, PR-AUC, accuracy,
