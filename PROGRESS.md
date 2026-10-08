@@ -5,8 +5,8 @@
 > `docs/experiment_protocol.md`. The running history lives in `docs/research_log.md`.
 
 **Last updated:** 2026-10-08
-**Current milestone:** Milestone 2 — evaluation module (metrics + patient-level 5-fold CV) — IN PROGRESS
-**Next action:** build metrics + CV module (testable locally) → then Baseline 0 (patch ViT, runs in Colab)
+**Current milestone:** Milestone 2 — evaluation module — COMPLETE ✅ (27 tests passing)
+**Next action:** Baseline 0 — independent patch ViT classifier (runs in Colab GPU)
 
 **Eval protocol DECIDED (2026-10-08):** prototype/debug on the single 57/13/11 split; report final
 results under **patient-level stratified 5-fold CV** (mean ± std). Applies to every model on the ladder.
@@ -23,8 +23,8 @@ Claude does **not** jump ahead or design the whole project unilaterally.
 | Stage | Description | Status |
 |-------|-------------|--------|
 | **M1** | Repo skeleton, Colab setup, BreakHis metadata, EDA, patient-level split + leakage check | ✅ **done, verified on real data** |
-| **M2** | Evaluation protocol: patient-level stratified k-fold CV + metrics module (ROC-AUC, PR-AUC, balanced acc, sens/spec, F1) | 🔸 **in progress** |
-| B0 | Baseline 0 — independent patch ViT classifier | ⬜ not started |
+| **M2** | Evaluation protocol: patient-level stratified k-fold CV + metrics module (ROC-AUC, PR-AUC, balanced acc, sens/spec, F1) | ✅ **done (27 tests)** |
+| B0 | Baseline 0 — independent patch ViT classifier | 🔸 **next** |
 | B1 | Baseline 1 — mean pooling over patient bag | ⬜ not started |
 | B2 | Baseline 2 — attention pooling | ⬜ not started |
 | B3 | Baseline 3 — spatial KNN graph + GNN | ⬜ not started |

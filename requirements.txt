@@ -1,15 +1,15 @@
-# --- Milestone 1 (metadata ingestion, EDA, patient-level splits) ---
+# --- Milestones 1-2 (metadata, EDA, patient-level splits, CV, metrics) ---
 numpy
 pandas
 pyyaml
 pytest
+scikit-learn           # metrics (ROC/PR-AUC), stratified k-fold CV
 
 # --- Later milestones (baselines, embeddings, graphs, GPCN) ---
 # Uncomment / install as each milestone begins. Pinned loosely for Colab.
 # torch
 # torchvision
 # timm                 # ViT backbones (Baseline 0 onward)
-# scikit-learn         # metrics, stratification helpers
 # matplotlib
 # seaborn
 # tqdm

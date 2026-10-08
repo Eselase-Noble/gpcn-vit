@@ -1,5 +1,16 @@
 # Research Log
 
+## 2026-10-08 — Milestone 2: evaluation module
+
+- `src/evaluation/metrics.py`: `compute_metrics` (ROC-AUC, PR-AUC, accuracy,
+  balanced accuracy, sensitivity, specificity, precision, F1) + `aggregate_metrics`
+  (mean ± std over folds, NaN-safe). Positive class = malignant = 1.
+- `src/splits/cross_validation.py`: `make_patient_kfold` — patient-level
+  stratified k-fold, optional inner val carve, per-fold + partition leakage checks.
+- Protocol decision recorded: prototype on single split, report under 5-fold CV.
+- Tests: +12 (27 total passing).
+- Next: Baseline 0 — independent patch ViT classifier (Colab GPU).
+
 ## 2026-10-08 — Milestone 1: pipeline skeleton
 
 - Created modular repo structure (`src/`, `configs/`, `experiments/`, `docs/`, …).
