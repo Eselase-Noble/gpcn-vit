@@ -5,8 +5,9 @@
 > `docs/experiment_protocol.md`. The running history lives in `docs/research_log.md`.
 
 **Last updated:** 2026-10-08
-**Current milestone:** Baseline 0 — patch ViT. CODE COMPLETE ✅ (compiles, logic unit-tested); awaits Colab GPU run.
-**Next action:** YOU run in Colab — `--smoke` first (plumbing), then prototype single split, then `--cv`. Bring metrics back.
+**Current milestone:** Baseline 0 — patch ViT. AUDITED; selection/threshold/provenance fixes applied ✅ (36 tests).
+**Next action:** YOU re-run CLEAN in Colab — prototype single split (fresh run dir), then `--cv`. Bring metrics back.
+  First run numbers were INVALID (epoch-0 selection + non-traceable dir); discard them.
 
 **Eval protocol DECIDED (2026-10-08):** prototype/debug on the single 57/13/11 split; report final
 results under **patient-level stratified 5-fold CV** (mean ± std). Applies to every model on the ladder.

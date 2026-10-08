@@ -10,6 +10,7 @@ import pytest
 from src.evaluation.aggregation import (
     aggregate_to_patient,
     evaluate_predictions,
+    evaluate_two_level,
     select_threshold,
 )
 from src.training.class_weights import compute_class_weights
@@ -95,3 +96,17 @@ def test_evaluate_reports_both_levels():
     assert out["patient"]["n"] == 2          # two patients
     assert out["image"]["n"] == 4            # four images
     assert out["patient"]["roc_auc"] == 1.0  # perfectly separable at patient level
+
+
+def test_evaluate_two_level_applies_distinct_thresholds():
+    # patient means: p1=0.55 (malignant), p2=0.45 (benign)
+    preds = _preds([
+        ("p1", 1, 0.50), ("p1", 1, 0.60),
+        ("p2", 0, 0.40), ("p2", 0, 0.50),
+    ])
+    # image threshold 0.55 vs patient threshold 0.50 -> different decisions
+    out = evaluate_two_level(preds, image_threshold=0.55, patient_threshold=0.50)
+    # patient: 0.55>=0.50 -> malignant (correct); 0.45<0.50 -> benign (correct)
+    assert out["patient"]["accuracy"] == 1.0
+    # ranking is perfect at both levels regardless of threshold
+    assert out["patient"]["roc_auc"] == 1.0

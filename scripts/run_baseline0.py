@@ -25,6 +25,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -39,7 +40,7 @@ from src.datasets.breakhis import build_metadata  # noqa: E402
 from src.datasets.image_dataset import BreakHisImageDataset  # noqa: E402
 from src.evaluation.aggregation import (  # noqa: E402
     aggregate_to_patient,
-    evaluate_predictions,
+    evaluate_two_level,
     select_threshold,
 )
 from src.evaluation.metrics import aggregate_metrics  # noqa: E402
@@ -69,8 +70,13 @@ def _loader(ds, batch_size, shuffle, seed, num_workers):
     )
 
 
-def run_fold(fold_df, model_cfg, train_cfg, split, device, out_dir, seed, num_workers):
-    """Train+evaluate one fold. Returns metrics dict (image+patient on test)."""
+def run_fold(fold_df, model_cfg, train_cfg, split, device, out_dir, seed,
+             num_workers, resume, git_commit):
+    """Train+evaluate one fold. Returns metrics dict (image+patient on test).
+
+    Selection = lowest val loss (in Trainer). Thresholds chosen per level on
+    VALIDATION only, then applied once to the held-out test fold.
+    """
     from src.models.baselines.patch_vit import build_model
     from src.training.trainer import Trainer, TrainConfig
 
@@ -93,33 +99,38 @@ def run_fold(fold_df, model_cfg, train_cfg, split, device, out_dir, seed, num_wo
     tcfg = TrainConfig(
         epochs=train_cfg["epochs"], lr=train_cfg["learning_rate"],
         weight_decay=train_cfg.get("weight_decay", 1e-4),
-        monitor=train_cfg.get("monitor", "roc_auc"),
-        monitor_level=train_cfg.get("monitor_level", "patient"),
     )
     trainer = Trainer(model, device, cw["weight_vector"], tcfg, out_dir / "checkpoints")
-    trainer.fit(train_loader, val_loader)
+    fit_info = trainer.fit(train_loader, val_loader, resume=resume)
     trainer.load_best()
+    log.info("selected epoch=%s val_loss=%.4f", fit_info["best_epoch"], fit_info["best_val_loss"])
 
-    # threshold from VALIDATION only (image-level: more samples than patients)
+    obj = train_cfg.get("threshold_objective", "balanced_accuracy")
+    # --- thresholds from VALIDATION only, chosen at the level they're applied ---
     val_preds = trainer.predict_df(val_loader)
-    threshold = select_threshold(
-        val_preds["label_binary"].to_numpy(), val_preds["prob"].to_numpy(),
-        objective=train_cfg.get("threshold_objective", "balanced_accuracy"),
-    )
-    log.info("selected threshold (val): %.4f", threshold)
+    val_patient = aggregate_to_patient(val_preds)
+    image_threshold = select_threshold(
+        val_preds["label_binary"].to_numpy(), val_preds["prob"].to_numpy(), objective=obj)
+    patient_threshold = select_threshold(
+        val_patient["label_binary"].to_numpy(), val_patient["prob"].to_numpy(), objective=obj)
+    log.info("thresholds (val-only): image=%.4f patient=%.4f", image_threshold, patient_threshold)
 
+    # --- single, final evaluation on the held-out test fold ---
     test_preds = trainer.predict_df(test_loader)
-    results = evaluate_predictions(test_preds, threshold=threshold)
+    results = evaluate_two_level(test_preds, image_threshold, patient_threshold)
 
-    # persist everything
-    val_preds.to_csv(out_dir / "preds_val.csv", index=False)
+    # persist everything (predictions at both levels, both val probs, provenance)
+    val_preds.to_csv(out_dir / "preds_val_image.csv", index=False)
+    val_patient.to_csv(out_dir / "preds_val_patient.csv", index=False)
     test_preds.to_csv(out_dir / "preds_test_image.csv", index=False)
     aggregate_to_patient(test_preds).to_csv(out_dir / "preds_test_patient.csv", index=False)
     (out_dir / "metrics.json").write_text(json.dumps({
         "image": results["image"], "patient": results["patient"],
-        "threshold": threshold, "threshold_source": "val_image",
+        "image_threshold": image_threshold, "patient_threshold": patient_threshold,
+        "selection": "min_val_loss", "selected_epoch": fit_info["best_epoch"],
+        "best_val_loss": fit_info["best_val_loss"],
         "class_weights": cw, "model_info": model_info,
-        "split_meta": split.meta,
+        "split_meta": split.meta, "git_commit": git_commit, "seed": seed,
     }, indent=2, default=str))
     return results
 
@@ -130,6 +141,8 @@ def main() -> int:
     ap.add_argument("--cv", action="store_true", help="5-fold patient-level CV (reported results)")
     ap.add_argument("--smoke", action="store_true", help="tiny subset + 1 epoch to test plumbing")
     ap.add_argument("--num-workers", type=int, default=2)
+    ap.add_argument("--resume", type=str, default=None, metavar="RUN_ID",
+                    help="Resume an interrupted run by its run-id dir (default: fresh run).")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text())
@@ -167,9 +180,18 @@ def main() -> int:
     tag = f"{mag}_cv" if args.cv else f"{mag}_single"
     if args.smoke:
         tag += "_smoke"  # keep throwaway smoke artifacts out of real run dirs
-    run_root = ensure_dir(get_results_root() / "baseline0" / tag)
+
+    # Provenance: each run gets its own immutable dir (never overwrite). Resume
+    # requires explicitly naming a prior run-id, so a default run is always a
+    # clean, traceable training process (audit decision 2026-10-08).
+    resume = args.resume is not None
+    run_id = args.resume if resume else (
+        time.strftime("%Y%m%d_%H%M%S") + "_" + str(env.get("git_commit", "nogit"))[:8])
+    run_root = ensure_dir(get_results_root() / "baseline0" / tag / run_id)
+    log.info("run dir: %s (resume=%s)", run_root, resume)
     (run_root / "run_config.json").write_text(json.dumps(
-        {"config": cfg, "env": env, "cv": args.cv, "smoke": args.smoke}, indent=2, default=str))
+        {"config": cfg, "env": env, "cv": args.cv, "smoke": args.smoke,
+         "run_id": run_id, "resume": resume}, indent=2, default=str))
 
     ratios = tuple(cfg.get("split", {}).get("ratios", (0.70, 0.15, 0.15)))
 
@@ -179,7 +201,8 @@ def main() -> int:
         fold_results = []
         for split in folds:
             fout = ensure_dir(run_root / f"fold_{split.meta['fold']}")
-            res = run_fold(df, model_cfg, train_cfg, split, device, fout, seed, args.num_workers)
+            res = run_fold(df, model_cfg, train_cfg, split, device, fout, seed,
+                           args.num_workers, resume, env.get("git_commit"))
             fold_results.append(res)
         summary = {
             "image": aggregate_metrics([r["image"] for r in fold_results]),
@@ -194,7 +217,8 @@ def main() -> int:
     else:
         split = make_patient_split(df, ratios=ratios, seed=seed)
         res = run_fold(df, model_cfg, train_cfg, split, device,
-                       ensure_dir(run_root / "single"), seed, args.num_workers)
+                       ensure_dir(run_root / "single"), seed, args.num_workers,
+                       resume, env.get("git_commit"))
         log.info("TEST patient-level: ROC-AUC=%.4f PR-AUC=%.4f balAcc=%.4f",
                  res["patient"]["roc_auc"], res["patient"]["pr_auc"],
                  res["patient"]["balanced_accuracy"])

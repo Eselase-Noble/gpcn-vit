@@ -39,12 +39,13 @@ class TrainConfig:
     epochs: int = 15
     lr: float = 3e-5
     weight_decay: float = 1e-4
-    monitor: str = "roc_auc"       # metric key to maximise on val
-    monitor_level: str = "patient"  # 'patient' or 'image'
     use_scheduler: bool = True
     grad_clip: Optional[float] = 1.0
     log_every: int = 50
     extra: Dict = field(default_factory=dict)
+    # Model selection = LOWEST validation loss (mean class-weighted CE over val
+    # images). Patient/image ROC-AUC/PR-AUC are logged per epoch for diagnostics
+    # only, never for checkpoint selection (audit decision 2026-10-08).
 
 
 class Trainer:
@@ -68,6 +69,10 @@ class Trainer:
             else None
         )
         self.criterion = nn.CrossEntropyLoss(weight=weight)
+        # Validation loss uses the SAME class weights as training (consistent
+        # objective) but reduction='none' so we can report the mean over val
+        # IMAGES exactly: mean_i( w_{y_i} * CE_i ).
+        self.val_criterion = nn.CrossEntropyLoss(weight=weight, reduction="none")
         self.optimizer = torch.optim.AdamW(
             [p for p in model.parameters() if p.requires_grad],
             lr=cfg.lr,
@@ -79,7 +84,8 @@ class Trainer:
             else None
         )
         self.start_epoch = 0
-        self.best_monitor = -np.inf
+        self.best_val_loss = np.inf   # selection = minimise val loss
+        self.best_epoch = -1
         self.history: List[Dict] = []
         self._fingerprint: Optional[Dict] = None  # set in fit()
 
@@ -99,7 +105,8 @@ class Trainer:
             "model": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict() if self.scheduler else None,
-            "best_monitor": self.best_monitor,
+            "best_val_loss": self.best_val_loss,
+            "best_epoch": self.best_epoch,
             "torch_rng": torch.get_rng_state(),
             "numpy_rng": np.random.get_state(),
             "cfg": self.cfg.__dict__,
@@ -134,7 +141,8 @@ class Trainer:
         self.optimizer.load_state_dict(state["optimizer"])
         if self.scheduler and state.get("scheduler"):
             self.scheduler.load_state_dict(state["scheduler"])
-        self.best_monitor = state.get("best_monitor", -np.inf)
+        self.best_val_loss = state.get("best_val_loss", np.inf)
+        self.best_epoch = state.get("best_epoch", -1)
         self.start_epoch = state["epoch"] + 1
         # RNG state must be a CPU ByteTensor; map_location may have moved it to GPU.
         if state.get("torch_rng") is not None:
@@ -144,8 +152,8 @@ class Trainer:
         hist = self.ckpt_dir / "history.json"
         if hist.exists():
             self.history = json.loads(hist.read_text())
-        logger.info("Resumed from epoch %d (best %s=%.4f).",
-                    self.start_epoch, self.cfg.monitor, self.best_monitor)
+        logger.info("Resumed from epoch %d (best val_loss=%.4f @ epoch %d).",
+                    self.start_epoch, self.best_val_loss, self.best_epoch)
 
     # ---- train / predict --------------------------------------------------
 
@@ -190,50 +198,73 @@ class Trainer:
             "prob": probs,
         })
 
-    def _val_monitor(self, val_loader: DataLoader) -> Dict:
-        preds = self.predict_df(val_loader)
-        if len(preds) == 0:  # no validation data (degenerate fold) — monitor undefined
-            return {self.cfg.monitor: float("nan")}
-        if self.cfg.monitor_level == "patient":
-            agg = aggregate_to_patient(preds)
-            m = compute_metrics(agg["label_binary"].to_numpy(), agg["prob"].to_numpy())
-        else:
-            m = compute_metrics(preds["label_binary"].to_numpy(), preds["prob"].to_numpy())
-        return m
+    @torch.no_grad()
+    def _evaluate_val(self, val_loader: DataLoader) -> Dict:
+        """Compute val loss (selection signal) + image/patient metrics (diagnostics).
 
-    def fit(self, train_loader: DataLoader, val_loader: DataLoader) -> Dict:
+        val_loss = mean over val IMAGES of the class-weighted CE, matching the
+        training objective's weighting. Returns nan loss for an empty loader.
+        """
+        self.model.eval()
+        preds = self.predict_df(val_loader)
+        if len(preds) == 0:
+            return {"val_loss": float("nan"), "image": {}, "patient": {}}
+
+        total, n = 0.0, 0
+        for batch in val_loader:
+            x = batch["image"].to(self.device, non_blocking=True)
+            y = batch["label"].to(self.device, non_blocking=True)
+            per_sample = self.val_criterion(self.model(x), y)  # w_{y_i} * CE_i
+            total += float(per_sample.sum().item())
+            n += x.size(0)
+        val_loss = total / n if n else float("nan")
+
+        image_m = compute_metrics(preds["label_binary"].to_numpy(), preds["prob"].to_numpy())
+        agg = aggregate_to_patient(preds)
+        patient_m = compute_metrics(agg["label_binary"].to_numpy(), agg["prob"].to_numpy())
+        return {"val_loss": val_loss, "image": image_m, "patient": patient_m}
+
+    def fit(self, train_loader: DataLoader, val_loader: DataLoader,
+            resume: bool = False) -> Dict:
+        """Train, selecting the checkpoint with the LOWEST validation loss.
+
+        resume=False (default) starts fresh for a clean, traceable run; pass
+        resume=True to continue an interrupted session from this ckpt_dir.
+        """
         self._fingerprint = {
             "n_train": len(train_loader.dataset),
             "epochs": self.cfg.epochs,
         }
-        self.maybe_resume()
+        if resume:
+            self.maybe_resume()
         for epoch in range(self.start_epoch, self.cfg.epochs):
             t0 = time.time()
             train_loss = self._train_one_epoch(train_loader, epoch)
             if self.scheduler:
                 self.scheduler.step()
-            val_metrics = self._val_monitor(val_loader)
-            monitor_val = val_metrics.get(self.cfg.monitor, float("nan"))
-            is_best = np.isfinite(monitor_val) and monitor_val > self.best_monitor
+            val = self._evaluate_val(val_loader)
+            val_loss = val["val_loss"]
+            is_best = np.isfinite(val_loss) and val_loss < self.best_val_loss
             if is_best:
-                self.best_monitor = float(monitor_val)
+                self.best_val_loss = float(val_loss)
+                self.best_epoch = epoch
             rec = {
                 "epoch": epoch,
                 "train_loss": train_loss,
-                "val": val_metrics,
-                "monitor": self.cfg.monitor,
-                "monitor_level": self.cfg.monitor_level,
-                "monitor_value": float(monitor_val),
+                "val_loss": val_loss,
+                "val_image": val["image"],
+                "val_patient": val["patient"],
                 "is_best": bool(is_best),
                 "seconds": round(time.time() - t0, 1),
             }
             self.history.append(rec)
             self._save(epoch, is_best)
-            logger.info("epoch %d done: train_loss=%.4f val_%s(%s)=%.4f%s",
-                        epoch, train_loss, self.cfg.monitor, self.cfg.monitor_level,
-                        monitor_val, "  *BEST*" if is_best else "")
-        return {"best_monitor": self.best_monitor, "epochs_run": self.cfg.epochs,
-                "history": self.history}
+            vp = val["patient"].get("roc_auc", float("nan"))
+            logger.info("epoch %d done: train_loss=%.4f val_loss=%.4f "
+                        "[diag val_patient_auc=%.3f]%s", epoch, train_loss, val_loss,
+                        vp, "  *BEST*" if is_best else "")
+        return {"best_epoch": self.best_epoch, "best_val_loss": self.best_val_loss,
+                "epochs_run": self.cfg.epochs, "history": self.history}
 
     def load_best(self) -> None:
         if self.best_ckpt.exists():

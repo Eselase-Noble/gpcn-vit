@@ -1,5 +1,31 @@
 # Research Log
 
+## 2026-10-08 — Baseline 0: scientific audit + remediation
+
+First full single-split run completed but the audit (user-requested) found:
+- **Integrity OK:** splits patient-disjoint; patient prob = mean(image probs);
+  one prediction/patient; class weights train-only; test used once; both
+  prediction levels saved. No leakage.
+- **Validity FAIL:** reported metrics came from the **epoch-0** model — val patient
+  ROC-AUC saturated at 1.0 and strict-`>` tie-break kept the earliest epoch.
+- **Provenance FAIL:** on-disk metrics.json (thr 0.587, AUC 1.0) did not match the
+  console log (thr 0.318, AUC 0.917) → ≥2 runs wrote the same dir; resume pulled a
+  prior session's best.pt. Results not traceable to one run.
+- Per-patient test (11 pts, 3 benign/8 malignant): perfect ranking (benign max
+  0.677 < malignant min 0.829) → AUC 1.0; one benign misclassified at thr 0.587
+  → specificity 2/3. Tiny test set; estimates high-variance. BreakHis 40X looks
+  near-separable for a plain ViT (watch: limited headroom for graph methods).
+
+Remediation applied (user-approved):
+1. **Selection = lowest validation loss** (mean class-weighted CE over val images);
+   patient/image AUC logged as diagnostics only. Trainer tracks best_epoch/best_val_loss.
+2. **Per-level thresholds from val**: patient threshold from val patients, image
+   threshold from val images; saved as patient_threshold/image_threshold with val probs.
+3. **Provenance**: each run -> immutable `results/baseline0/<tag>/<run_id>/`
+   (run_id = timestamp_git8), never overwrite; resume opt-in via `--resume <run_id>`;
+   git_commit/seed/config recorded. `evaluate_two_level` added (+1 test, 36 total).
+NEXT: clean re-run from scratch (single split prototype → 5-fold CV) for the real floor.
+
 ## 2026-10-08 — Baseline 0: patch ViT training stack (code complete)
 
 Spec locked in `docs/baseline0_spec.md` (fixed ViT-S/16 backbone across ladder,

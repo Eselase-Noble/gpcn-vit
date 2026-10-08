@@ -32,6 +32,20 @@ representation — the floor the pooling/graph/GPCN rungs must beat.
 - Validation/test kept at **natural class distribution**.
 - Checkpoint regularly; resumable from checkpoint (Colab disconnection).
 
+### Checkpoint selection (audit decision 2026-10-08)
+- Select the checkpoint with the **lowest validation loss** = mean over val IMAGES
+  of the class-weighted CE (same weights as training). Val ROC-AUC saturates at
+  1.0 on 13 patients, so it CANNOT be the selection signal.
+- Log patient- and image-level val ROC-AUC/PR-AUC each epoch as **diagnostics only**.
+- Save the selected epoch and its val loss in `metrics.json`.
+- Evaluate the test set **exactly once**, after selection.
+
+### Provenance (audit decision 2026-10-08)
+- Each run writes to its own immutable `results/baseline0/<tag>/<run_id>/` dir
+  (never overwrite). `run_id = <timestamp>_<git8>`.
+- Resume is **opt-in** via `--resume <run_id>`; a default run is always a clean,
+  fully-traceable training process. Record `git_commit`, config, seed.
+
 ## Evaluation (PATIENT-LEVEL is primary)
 - Train at image level; report **both** image-level and patient-level metrics.
 - Patient-level is the primary evidence for comparing the ladder.
@@ -39,7 +53,12 @@ representation — the floor the pooling/graph/GPCN rungs must beat.
 - Metrics (both levels): ROC-AUC, PR-AUC, sensitivity, specificity, accuracy,
   balanced accuracy, precision, F1.
 - **ROC-AUC and PR-AUC are the threshold-independent primary metrics.**
-- Threshold for threshold-dependent metrics is chosen on **train/val**, NEVER the test fold.
+- Threshold for threshold-dependent metrics is chosen on **val only**, NEVER the
+  test fold, and **per level**: a patient-level threshold from val patients for
+  patient metrics, an image-level threshold from val images for image metrics
+  (audit decision 2026-10-08 — avoids applying an image threshold to patient
+  mean-probs, which live on a compressed scale). Save `patient_threshold` and
+  `image_threshold` plus the val probabilities used to derive them.
 - **Persist per-image AND per-patient predictions** so alternative aggregation
   strategies can be evaluated later without retraining.
 

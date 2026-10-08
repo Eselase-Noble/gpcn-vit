@@ -113,3 +113,28 @@ def evaluate_predictions(
         threshold=threshold,
     )
     return {"image": image_metrics, "patient": patient_metrics}
+
+
+def evaluate_two_level(
+    preds: pd.DataFrame,
+    image_threshold: float,
+    patient_threshold: float,
+    aggregation: str = "mean",
+) -> Dict[str, Dict[str, float]]:
+    """Evaluate with a SEPARATE threshold per aggregation level.
+
+    Fixes the scale mismatch between image probabilities and patient mean-probs:
+    image metrics use ``image_threshold`` (chosen on val images), patient metrics
+    use ``patient_threshold`` (chosen on val patients). Both thresholds must come
+    from validation, never from ``preds`` if these are the test fold.
+    """
+    image_metrics = compute_metrics(
+        preds["label_binary"].to_numpy(), preds["prob"].to_numpy(),
+        threshold=image_threshold,
+    )
+    patient = aggregate_to_patient(preds, method=aggregation)
+    patient_metrics = compute_metrics(
+        patient["label_binary"].to_numpy(), patient["prob"].to_numpy(),
+        threshold=patient_threshold,
+    )
+    return {"image": image_metrics, "patient": patient_metrics}
