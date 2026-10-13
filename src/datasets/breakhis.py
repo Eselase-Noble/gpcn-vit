@@ -30,7 +30,7 @@ downstream evaluation is compromised, so it is isolated and unit-tested here.
 """
 
 from __future__ import annotations
-  
+
 import logging
 import re
 from dataclasses import asdict, dataclass
@@ -48,7 +48,7 @@ TUMOR_TYPES = {
     "F": "fibroadenoma",
     "PT": "phyllodes_tumor",
     "TA": "tubular_adenoma",
-    # malignant
+    # malignant  
     "DC": "ductal_carcinoma",
     "LC": "lobular_carcinoma",
     "MC": "mucinous_carcinoma",
