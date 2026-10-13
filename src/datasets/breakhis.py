@@ -48,7 +48,7 @@ TUMOR_TYPES = {
     "F": "fibroadenoma",
     "PT": "phyllodes_tumor",
     "TA": "tubular_adenoma",
-    # malignant  
+    # malignant    
     "DC": "ductal_carcinoma",
     "LC": "lobular_carcinoma",
     "MC": "mucinous_carcinoma",
