@@ -30,13 +30,12 @@ downstream evaluation is compromised, so it is isolated and unit-tested here.
 """
 
 from __future__ import annotations
-
+ 
 import logging
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional
-
 import pandas as pd
 
 logger = logging.getLogger(__name__)
