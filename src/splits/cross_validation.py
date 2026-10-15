@@ -14,8 +14,10 @@ same leakage-verification and JSON (de)serialisation machinery applies.
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import List
+from pathlib import Path
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -127,3 +129,76 @@ def verify_kfold(folds: List[PatientSplit], df: pd.DataFrame) -> None:
         )
     logger.info("k-fold verification PASSED: %d folds partition %d patients.",
                 len(folds), len(all_patients))
+
+
+CV_FOLDS_SCHEMA = "gpcn.cv_folds/1"
+
+
+def save_folds(
+    folds: List[PatientSplit],
+    path: Path,
+    *,
+    dataset: Optional[str] = None,
+    magnification: Optional[str] = None,
+    extra: Optional[Dict] = None,
+) -> Path:
+    """Persist CV folds to ONE canonical JSON so every model reuses identical folds.
+
+    Baseline 0 re-derives folds in-process; from Baseline 1 onward every model
+    loads this artifact instead, so paired comparisons share identical outer test
+    patients and there is no risk of silent drift (e.g. a changed patient set)
+    between models. Round-trips via :func:`load_folds`.
+    """
+    if not folds:
+        raise ValueError("no folds to save")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    first = folds[0]
+    payload = {
+        "schema": CV_FOLDS_SCHEMA,
+        "dataset": dataset,
+        "magnification": magnification,
+        "n_splits": int(first.meta.get("n_splits", len(folds))),
+        "seed": int(first.seed),
+        "val_fraction": float(first.meta.get("val_fraction", 0.0)),
+        "n_patients": first.meta.get("n_patients"),
+        "folds": [
+            {
+                "train": sorted(f.train),
+                "val": sorted(f.val),
+                "test": sorted(f.test),
+                "seed": int(f.seed),
+                "ratios": list(f.ratios),
+                "meta": f.meta,
+            }
+            for f in folds
+        ],
+    }
+    if extra:
+        payload["extra"] = extra
+    path.write_text(json.dumps(payload, indent=2))
+    logger.info("Wrote %d CV folds -> %s", len(folds), path)
+    return path
+
+
+def load_folds(path: Path, df: Optional[pd.DataFrame] = None) -> List[PatientSplit]:
+    """Load canonical CV folds written by :func:`save_folds`.
+
+    If ``df`` is given, re-verify the loaded folds still partition its patients
+    disjointly — a cheap guard against a stale or hand-edited folds file.
+    """
+    d = json.loads(Path(path).read_text())
+    if d.get("schema") != CV_FOLDS_SCHEMA:
+        raise ValueError(f"unexpected folds schema {d.get('schema')!r} in {path}")
+    folds = [
+        PatientSplit(
+            train=f["train"], val=f["val"], test=f["test"],
+            seed=f["seed"], ratios=tuple(f["ratios"]), meta=f.get("meta", {}),
+        )
+        for f in d["folds"]
+    ]
+    if df is not None:
+        for f in folds:
+            verify_disjoint(f, df)
+        verify_kfold(folds, df)
+    return folds
