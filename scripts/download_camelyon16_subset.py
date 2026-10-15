@@ -85,34 +85,51 @@ def main() -> int:
 
     tif = list_keys(s3, prefix, suffix=".tif")
     xml = list_keys(s3, prefix, suffix=".xml")
-    tumor = sorted(k for k, _ in tif if "tumor" in k.lower())
-    normal = sorted(k for k, _ in tif if "normal" in k.lower())
-    log.info("found %d .tif (%d tumor, %d normal), %d annotation .xml",
+    sizes = {k: s for k, s in tif}
+    # Prefer genuine WSIs: skip obvious derivatives (lesion masks / tissue masks).
+    def _is_mask(k):
+        kl = k.lower()
+        return "mask" in kl or "_tissue" in kl
+    tumor = sorted(k for k, _ in tif if "tumor" in k.lower() and not _is_mask(k))
+    normal = sorted(k for k, _ in tif if "normal" in k.lower() and not _is_mask(k))
+    log.info("found %d .tif (%d tumor, %d normal WSIs after excluding masks), %d .xml",
              len(tif), len(tumor), len(normal), len(xml))
 
     if args.list_only:
-        for k, sz in tif[:20]:
-            log.info("  %s  (%.1f GB)", k, sz / 1e9)
+        import collections
+        def _sub(k):
+            rest = k[len(prefix):]
+            return rest.split("/")[0] if "/" in rest else "(root)"
+        log.info(".tif by subfolder: %s", dict(collections.Counter(_sub(k) for k, _ in tif)))
+        log.info("sample keys (name — size):")
+        for k, sz in sorted(tif)[:25]:
+            log.info("  %s  —  %.2f GB", k, sz / 1e9)
         return 0
 
     picks = tumor[: args.n_tumor] + normal[: args.n_normal]
     if not picks:
-        log.error("no tumor/normal .tif matched; re-run with --list-only to inspect layout")
+        log.error("no non-mask tumor/normal WSIs matched; re-run with --list-only to inspect layout")
         return 1
+
+    def _download_verified(key, out):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        expect = sizes.get(key)
+        log.info("downloading %s (%.2f GB) -> %s", key, (expect or 0) / 1e9, out)
+        s3.download_file(BUCKET, key, str(out))
+        got = out.stat().st_size
+        if expect is not None and got != expect:
+            raise IOError(f"TRUNCATED {out.name}: got {got} bytes, expected {expect}. "
+                          f"Download to LOCAL disk (/content/...), not a Drive mount, then move.")
+
     ann = {k for k, _ in xml}
     dest = Path(args.dest)
     for key in picks:
-        out = dest / Path(key).name
-        out.parent.mkdir(parents=True, exist_ok=True)
-        log.info("downloading %s -> %s", key, out)
-        s3.download_file(BUCKET, key, str(out))
+        _download_verified(key, dest / Path(key).name)
         stem = Path(key).stem
         for a in (a for a in ann if Path(a).stem == stem):
-            aout = dest / "annotations" / Path(a).name
-            aout.parent.mkdir(parents=True, exist_ok=True)
-            s3.download_file(BUCKET, a, str(aout))
+            _download_verified(a, dest / "annotations" / Path(a).name)
             log.info("  + annotation %s", Path(a).name)
-    log.info("done: %d slides under %s", len(picks), dest)
+    log.info("done: %d slides under %s (sizes verified against S3)", len(picks), dest)
     return 0
 
 
