@@ -39,8 +39,8 @@ Claude does **not** jump ahead or design the whole project unilaterally.
 | **M2** | Evaluation protocol: patient-level stratified k-fold CV + metrics module (ROC-AUC, PR-AUC, balanced acc, sens/spec, F1) | ✅ **done (27 tests)** |
 | **B0** | Baseline 0 — independent patch ViT classifier (ViT-S/16, weighted loss, patient-level eval, resumable trainer, embedding cache) | ✅ **CV done (0.9567±0.0498)** |
 | **S** | Shared substrate — canonical folds artifact + frozen ViT-S/16 embedding cache (`make_cv_folds.py`, `extract_embeddings.py`) | 🔸 **code done — awaiting Colab run** |
-| B1 | Baseline 1 — mean pooling of frozen embeddings → logreg (`mean_pool.py`, `run_baseline1.py`) | 🔸 **code done — awaiting Colab run** |
-| B2 | Baseline 2 — attention pooling / MIL | ⬜ next increment |
+| B1 | Baseline 1 — mean pooling of frozen embeddings → logreg (`mean_pool.py`, `run_baseline1.py`) | ✅ **CV done: 0.9313 ± 0.0504 ROC-AUC (frozen encoder)** |
+| B2 | Baseline 2 — attention/MIL pooling of frozen embeddings (`attention_mil.py`, `run_baseline2.py`) | 🔸 **code done — awaiting Colab run** |
 | B3 | Baseline 3 — spatial KNN graph + GNN (CAMELYON16; `wsi_tiling.py`, `tile_wsi.py`, `download_camelyon16_subset.py` ready) | 🔸 **WSI tiling pipeline code done** |
 | B4 | Baseline 4 — feature KNN graph + GNN | ⬜ not started |
 | B5 | Baseline 5 — hybrid graph + GNN | ⬜ not started |
