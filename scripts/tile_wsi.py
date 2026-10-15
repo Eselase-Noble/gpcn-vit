@@ -41,9 +41,39 @@ def slide_label(name: str) -> int:
     return -1  # unknown (e.g. test_* slides -> resolve from reference.csv separately)
 
 
+def _robust_thumbnail(slide, thumb_max):
+    """Build a low-res overview block-by-block, tolerating malformed TIFF tiles.
+
+    openslide's get_thumbnail() decodes a whole pyramid level in one RGBA pass, so
+    a single bad tile (common in a few CAMELYON16 slides -> 'TIFFRGBAImageGet
+    failed') kills the slide. Reading in blocks isolates the damage: unreadable
+    blocks are left white (treated as background by the tissue mask).
+    """
+    from PIL import Image
+
+    W0, H0 = slide.level_dimensions[0]
+    ds = max(max(W0, H0) / float(thumb_max), 1.0)
+    level = slide.get_best_level_for_downsample(ds)
+    lw, lh = slide.level_dimensions[level]
+    lvl_ds = slide.level_downsamples[level]
+    img = Image.new("RGB", (lw, lh), (255, 255, 255))
+    block, bad = 2048, 0
+    for by in range(0, lh, block):
+        for bx in range(0, lw, block):
+            w, h = min(block, lw - bx), min(block, lh - by)
+            loc = (int(bx * lvl_ds), int(by * lvl_ds))
+            try:
+                img.paste(slide.read_region(loc, level, (w, h)).convert("RGB"), (bx, by))
+            except Exception:  # noqa: BLE001  malformed tile -> leave as background
+                bad += 1
+    if bad:
+        log.warning("  %d unreadable thumbnail block(s) filled as background", bad)
+    img.thumbnail((thumb_max, thumb_max))
+    return img
+
+
 def tile_slide(path, out_root, tile_size, stride, level, min_tissue, thumb_max):
-    import openslide
-    from PIL import Image  # noqa: F401  (ensures pillow present for .save)
+    import openslide  # noqa: F401  (ensures the dependency is present)
 
     slide = openslide.OpenSlide(str(path))
     sid = Path(path).stem
@@ -51,7 +81,7 @@ def tile_slide(path, out_root, tile_size, stride, level, min_tissue, thumb_max):
     W0, H0 = slide.level_dimensions[0]
 
     # Thumbnail for tissue detection; downsample = level-0 px per thumbnail px.
-    thumb = slide.get_thumbnail((thumb_max, thumb_max)).convert("RGB")
+    thumb = _robust_thumbnail(slide, thumb_max)
     tw, th = thumb.size
     downsample = max(W0 / tw, H0 / th)
     mask = tissue_mask(np.asarray(thumb))
@@ -68,14 +98,20 @@ def tile_slide(path, out_root, tile_size, stride, level, min_tissue, thumb_max):
 
     out_dir = Path(out_root) / sid
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = []
+    rows, skipped = [], 0
     for t in kept:
-        patch = slide.read_region((t["x"], t["y"]), lvl, (tile_size, tile_size)).convert("RGB")
+        try:
+            patch = slide.read_region((t["x"], t["y"]), lvl, (tile_size, tile_size)).convert("RGB")
+        except Exception:  # noqa: BLE001  malformed tile -> skip this patch only
+            skipped += 1
+            continue
         fn = out_dir / f"{sid}_r{t['row']}_c{t['col']}_x{t['x']}_y{t['y']}.png"
         patch.save(fn)
         rows.append({"slide_id": sid, "label": label, "level": lvl,
                      "row": t["row"], "col": t["col"], "x": t["x"], "y": t["y"],
                      "filepath": str(fn)})
+    if skipped:
+        log.warning("  %s: skipped %d unreadable tile(s)", sid, skipped)
     slide.close()
     return rows
 
@@ -98,10 +134,16 @@ def main() -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    all_rows = []
+    all_rows, failed = [], []
     for s in slides:
-        all_rows.extend(tile_slide(s, out, args.tile_size, args.stride,
-                                   args.level, args.min_tissue, args.thumb_max))
+        try:
+            all_rows.extend(tile_slide(s, out, args.tile_size, args.stride,
+                                       args.level, args.min_tissue, args.thumb_max))
+        except Exception as e:  # noqa: BLE001  one bad slide must not kill the batch
+            log.error("SKIPPING slide %s: %s", s.name, e)
+            failed.append(s.name)
+    if failed:
+        log.warning("%d slide(s) failed and were skipped: %s", len(failed), failed)
 
     csv_path = out / "tiles.csv"
     with csv_path.open("w", newline="") as fh:
