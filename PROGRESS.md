@@ -42,13 +42,17 @@ Claude does **not** jump ahead or design the whole project unilaterally.
 | B1 | Baseline 1 — mean pooling of frozen embeddings → logreg (`mean_pool.py`, `run_baseline1.py`) | ✅ **CV done: 0.9313 ± 0.0504 ROC-AUC (frozen encoder)** |
 | B2 | Baseline 2 — attention/MIL pooling of frozen embeddings (`attention_mil.py`, `run_baseline2.py`) | ✅ **CV done: 0.9380 ± 0.0544 ROC-AUC** |
 | B3 | Baseline 3 — spatial KNN graph + GNN (CAMELYON16; tiling+embedding pipeline validated on 6 slides: 22,706 tiles) | 🔸 **graph construction + node features done; GNN run needs larger download** |
-| B4 | Baseline 4 — feature-similarity kNN graph + GraphSAGE on BreakHis (`feature.py`, `sage.py`, `run_graph_breakhis.py`) | 🔸 **code done — awaiting Colab run** |
+| B4 | Baseline 4 — feature-similarity kNN graph + GraphSAGE on BreakHis (`feature.py`, `sage.py`, `run_graph_breakhis.py`) | ✅ **CV done — NO benefit (see below)** |
 | B5 | Baseline 5 — hybrid graph + GNN | ⬜ not started |
-| GN | Graph-necessity controls (feature / rewired / none) — built into `run_graph_breakhis.py --graph` | 🔸 **code done — awaiting Colab run** |
+| GN | Graph-necessity controls (feature / rewired / none) — `run_graph_breakhis.py --graph` | ✅ **done — feature ≈ none (p=0.79)** |
+| B3 | CAMELYON16 spatial graph + GNN (`wsi_graph.py`, `run_graph_camelyon.py`, controls spatial/rewired/none) | 🔸 **code done — needs larger slide download (>=~20) for CV** |
 
-**Non-graph ceiling established (frozen ViT-S/16, patient ROC-AUC):** B1 mean-pool 0.9313 ± 0.0504,
-B2 attention 0.9380 ± 0.0544 — learned pooling ≈ flat mean. A feature graph must beat BOTH these AND its
-own rewired/none controls to claim relationships matter. Fold 3 is the hard split across all models.
+**BreakHis RESULT — graph structure adds nothing (see `docs/findings_breakhis.md`).**
+Pooled per-patient ROC-AUC (81 pts): B0 0.929, B1 0.918, B2 0.917, graph-feature 0.877,
+graph-none 0.872, graph-rewired 0.856. Paired bootstrap: feature vs none Δ−0.005 (p=0.79, inert);
+feature vs rewired Δ−0.021 (p=0.32). Non-graph ≈ each other (B1≈B2), directionally > graphs.
+Conclusion: relationships among BreakHis patches carry no diagnostic signal beyond pooling (expected —
+no spatial coords). Cross-model report: `scripts/compare_models.py`. Spatial hypothesis → CAMELYON16.
 | M6 | GPCN-ViT | ⬜ not started |
 | — | Strong SOTA baselines → independent datasets → true WSI (CAMELYON) → generalization | ⬜ future |
 
