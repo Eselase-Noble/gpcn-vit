@@ -40,11 +40,15 @@ Claude does **not** jump ahead or design the whole project unilaterally.
 | **B0** | Baseline 0 — independent patch ViT classifier (ViT-S/16, weighted loss, patient-level eval, resumable trainer, embedding cache) | ✅ **CV done (0.9567±0.0498)** |
 | **S** | Shared substrate — canonical folds artifact + frozen ViT-S/16 embedding cache (`make_cv_folds.py`, `extract_embeddings.py`) | 🔸 **code done — awaiting Colab run** |
 | B1 | Baseline 1 — mean pooling of frozen embeddings → logreg (`mean_pool.py`, `run_baseline1.py`) | ✅ **CV done: 0.9313 ± 0.0504 ROC-AUC (frozen encoder)** |
-| B2 | Baseline 2 — attention/MIL pooling of frozen embeddings (`attention_mil.py`, `run_baseline2.py`) | 🔸 **code done — awaiting Colab run** |
-| B3 | Baseline 3 — spatial KNN graph + GNN (CAMELYON16; `wsi_tiling.py`, `tile_wsi.py`, `download_camelyon16_subset.py` ready) | 🔸 **WSI tiling pipeline code done** |
-| B4 | Baseline 4 — feature KNN graph + GNN | ⬜ not started |
+| B2 | Baseline 2 — attention/MIL pooling of frozen embeddings (`attention_mil.py`, `run_baseline2.py`) | ✅ **CV done: 0.9380 ± 0.0544 ROC-AUC** |
+| B3 | Baseline 3 — spatial KNN graph + GNN (CAMELYON16; tiling+embedding pipeline validated on 6 slides: 22,706 tiles) | 🔸 **graph construction + node features done; GNN run needs larger download** |
+| B4 | Baseline 4 — feature-similarity kNN graph + GraphSAGE on BreakHis (`feature.py`, `sage.py`, `run_graph_breakhis.py`) | 🔸 **code done — awaiting Colab run** |
 | B5 | Baseline 5 — hybrid graph + GNN | ⬜ not started |
-| GN | Graph-necessity controls (real / random / edge-shuffled) | ⬜ not started |
+| GN | Graph-necessity controls (feature / rewired / none) — built into `run_graph_breakhis.py --graph` | 🔸 **code done — awaiting Colab run** |
+
+**Non-graph ceiling established (frozen ViT-S/16, patient ROC-AUC):** B1 mean-pool 0.9313 ± 0.0504,
+B2 attention 0.9380 ± 0.0544 — learned pooling ≈ flat mean. A feature graph must beat BOTH these AND its
+own rewired/none controls to claim relationships matter. Fold 3 is the hard split across all models.
 | M6 | GPCN-ViT | ⬜ not started |
 | — | Strong SOTA baselines → independent datasets → true WSI (CAMELYON) → generalization | ⬜ future |
 
